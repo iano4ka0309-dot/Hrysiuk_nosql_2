@@ -24,3 +24,52 @@ pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
 #    arxiv_id, title, abstract[:500], authors[:200], year, category
 # 4. upsert з прогресом (tqdm)
 # 5. Вивести загальну кількість векторів в індексі
+# Створюємо індекс, якщо його ще немає
+# scripts/03_load_to_pinecone.py
+
+
+ 
+
+# 1. Створюємо індекс, якщо його ще немає
+if INDEX_NAME not in pc.list_indexes().names():
+    pc.create_index(
+        name=INDEX_NAME,
+        dimension=VECTOR_DIM,
+        metric="dotproduct",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+    )
+    print(f"Індекс '{INDEX_NAME}' створено.")
+else:
+    print(f"Індекс '{INDEX_NAME}' уже існує.")
+
+index = pc.Index(INDEX_NAME)
+
+# 2. Читаємо дані та ембеддинги
+df = pd.read_parquet(INPUT_PARQUET)
+embeddings = np.load(INPUT_EMBEDDINGS)
+print("Статей:", len(df), "| Ембеддинги:", embeddings.shape)
+
+# 3-4. Завантажуємо батчами з прогресом
+for start in tqdm(range(0, len(df), BATCH_SIZE), desc="Завантаження в Pinecone"):
+    end = min(start + BATCH_SIZE, len(df))
+    batch = []
+    for i in range(start, end):
+        row = df.iloc[i]
+        batch.append({
+            "id": f"paper_{i}",
+            "values": embeddings[i].tolist(),
+            "metadata": {
+                "arxiv_id": str(row["id"]),
+                "title": str(row["title"]),
+                "abstract": str(row["abstract"])[:500],
+                "authors": str(row["authors"])[:200],
+                "year": int(row["year"]),
+                "category": str(row["category"]),
+            },
+        })
+    index.upsert(vectors=batch)
+
+# 5. Підсумок
+time.sleep(5)  # статистика оновлюється із невеликою затримкою
+stats = index.describe_index_stats()
+print("Усього векторів в індексі:", stats["total_vector_count"])
