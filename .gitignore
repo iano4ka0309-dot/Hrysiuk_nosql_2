@@ -1,0 +1,9 @@
+.env
+kaggle.json
+data/
+embeddings/
+arxiv.zip
+arxiv-metadata-oai-snapshot.json
+__pycache__/
+*.pyc
+.venv/
