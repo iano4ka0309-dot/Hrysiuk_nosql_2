@@ -5,6 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
+import time
 
 load_dotenv()
 
