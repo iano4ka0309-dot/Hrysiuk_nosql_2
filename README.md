@@ -12,10 +12,10 @@ kaggle datasets download -d Cornell-University/arxiv && unzip arxiv.zip
 python scripts/01_prepare_data.py
 python scripts/02_embed.py
 python scripts/03_load_to_pinecone.py
+python scripts/07_add_recent.py     # додає свіжі статті cs.LG (2021+) для демонстрації фільтрів
 python scripts/04_search.py
 python scripts/05_chunking.py
 python scripts/06_hybrid_search.py   # додатково
-```
 
 ## Частина 1. Вибір інструментів
 
@@ -37,7 +37,7 @@ SPECTER2 навчена на понад 6 млн триплетів цитува
 
 **Вивід скриптів 01-02:**
 
-```text
+text
 Завантажено статей: 10000
 
 Розподіл за категоріями (топ-10):
@@ -69,12 +69,12 @@ math.AG                209
 
 **Вивід скрипту 03:**
 
-```text
+text
 Індекс 'arxiv-papers' уже існує.
 Статей: 10000 | Ембеддинги: (10000, 768)
 Завантаження в Pinecone: 100%|██████████| 50/50 [01:29<00:00,  1.79s/it]
 Усього векторів в індексі: 10000
-```
+
 
 Стан індексу після завантаження (`describe_index_stats`): розмірність 768, `total_vector_count` = 10000.
 
@@ -94,13 +94,61 @@ math.AG                209
 
 ### Порівняння видачі з фільтрами (A і B)
 <!-- ✏️ після запуску фільтрів -->
+### Порівняння видачі з фільтрами (A і B)
+
+**До додавання свіжих статей.** Усі 10 000 статей вибірки належать до 2007 року, а категорій `cs.LG` лише 10. Тому фільтр A (reinforcement learning, не раніше 2021 року, категорія `cs.LG`) повернув **порожній результат**: жодна стаття не відповідає умові за роком, тож серед відфільтрованих статей Pinecone не мав із чого вибирати. Фільтр B (до 2015 року) повернув ті самі п'ять статей, що й пошук без фільтра, бо 2007 < 2015, тобто фільтр нікого не відсіяв.
+
+**Після додавання свіжих статей.** Щоб фільтри було видно в дії, скриптом `07_add_recent.py` до індексу додано 600 випадкових статей `cs.LG` за 2021 рік і пізніше (разом 10 600 векторів). Тепер:
+
+text
+=== A: RL, з 2021 року, cs.LG ===
+0.8526 | Toward a Metrology for Artificial Intelligence: Hidden-Rule Environments and Reinforcement Learning | cs.LG | 2025
+0.8516 | Guiding Reinforcement Learning Using Uncertainty-Aware Large Language Models | cs.LG | 2024
+0.8498 | Enhancing the MADDPG Algorithm for Multi-Agent Learning via Action Inference and Importance Sampling | cs.LG | 2026
+0.8486 | Q-Cogni: An Integrated Causal Reinforcement Learning Framework | cs.LG | 2023
+0.8484 | Adaptive TD-Lambda for Cooperative Multi-agent Reinforcement Learning | cs.LG | 2026
+
+=== B: до 2015 року ===
+0.8455 | Multi-Agent Modeling Using Intelligent Agents in the Game of Lerpa | cs.MA | 2007
+0.8190 | Introduction to Phase Transitions in Random Optimization Problems | cond-mat.stat-mech | 2007
+0.8102 | Architecture for Pseudo Acausal Evolvable Embedded Systems | cs.NE | 2007
+0.8018 | Why only few are so successful ? | physics.pop-ph | 2007
+0.8011 | Opinion Dynamics and Sociophysics | physics.soc-ph | 2007
+```
+
+Фільтр A тепер повертає статті про навчання з підкріпленням за 2023-2026 роки, а фільтр B відсікає свіжі статті й залишає лише статті 2007 року, хоча за змістом вони далекі від RL. Висновок: фільтри за метаданими працюють усередині бази до вибору топ-k, і тому вони визначають, **серед яких статей** шукати, а схожість за змістом лише впорядковує вже відібрані статті.
+
+**Порівняння метрик на локальних ембеддингах** (запит "teaching machines to recognize objects in pictures")
+
+text
+=== cosine ===
+0.8294 | Capturing knots in polymers
+0.8260 | Symbolic sensors : one solution to the numerical-symbolic interface
+0.8254 | The Mathematics
+0.8181 | Modeling the field of laser welding melt pool by RBFNN
+0.8142 | Python for Education: Computational Methods for Nonlinear Systems
+
+=== dot product ===
+(ті самі п'ять статей, ті самі значення)
+
+=== L2 ===
+0.5842 | Capturing knots in polymers
+0.5899 | Symbolic sensors : one solution to the numerical-symbolic interface
+0.5910 | The Mathematics
+0.6032 | Modeling the field of laser welding melt pool by RBFNN
+0.6095 | Python for Education: Computational Methods for Nonlinear Systems
+
+Топ-5 збігаються (cosine vs dot): True
+Топ-5 збігаються (cosine vs L2): True
+
 
 ### Теоретичні питання
-1. Чи збігаються топ-5 для cosine і dot product і чому?
-2. Чи відрізняються результати для L2 і чому?
-3. Що сталося б, якби ембеддинги не були нормалізовані?
 
-<!-- ✏️ відповіді після порівняння метрик -->
+1. **Чи збігаються топ-5 для cosine і dot product і чому?** Так, збігаються (значення однакові). Косинусна схожість дорівнює (a·b) / (|a|·|b|), а ембеддинги нормалізовані, тобто довжина кожного вектора дорівнює 1. Знаменник стає 1·1 = 1, і косинус збігається зі скалярним добутком.
+
+2. **Чи відрізняються результати для L2 і чому?** Порядок статей той самий, відрізняються лише числа: для L2 менше значення означає більшу схожість, тому порядок зворотний за значенням, але статті в топ-5 ті самі. Для одиничних векторів справджується `d² = 2 − 2·cos`: наприклад, для першої статті `0,5842² ≈ 0,3413`, а `2 − 2·0,8294 = 0,3412`. Менша відстань відповідає більшому косинусу, тому ранжування за L2 і за cosine збігається.
+
+3. **Що сталося б, якби ембеддинги не були нормалізовані?** Тоді довжина векторів була б різною. Косинусна схожість від довжини не залежить і лишилась би коректною, а dot product і L2 враховують довжину: вектори більшої довжини отримували б вищі оцінки за dot product, і порядок результатів міг би відрізнятися від косинусного. Тому три метрики перестали б давати однаковий топ-5, а dot product і L2 віддавали б перевагу статтям із довшими векторами, а не найближчим за змістом.
 
 ## Частина 4. Chunking
 
