@@ -22,3 +22,26 @@ df = pd.read_parquet("data/arxiv_subset.parquet")  # для отримання �
 # 3. Чистий семантичний пошук (топ-5: назва, категорія, рік, частина abstract)
 # 4. Пошук з фільтрацією: A) RL, останні 5 років, cs.LG; B) до 2015 року
 # 5. Порівняння метрик локально: cosine, dot product, L2 (топ-5 кожної)
+# 2. Кодирование запроса
+def encode_query(text: str):
+    # формат "title [SEP] abstract" для запроса НЕ нужен — это обычный текст
+    return model.encode(text, normalize_embeddings=True).tolist()
+
+
+# 3. Семантический поиск (топ-5)
+def search(query: str, top_k: int = TOP_K, filter: dict | None = None):
+    vec = encode_query(query)
+    res = index.query(
+        vector=vec,
+        top_k=top_k,
+        include_metadata=True,
+        filter=filter,
+    )
+    for m in res["matches"]:
+        md = m["metadata"]
+        print(f"{m['score']:.4f} | {md['title']} | {md['category']} | {int(md['year'])}")
+        print("    ", md["abstract"][:200])
+    return res
+
+
+search("teaching machines to recognize objects in pictures")
